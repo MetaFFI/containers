@@ -13,7 +13,14 @@ for command in commands:
 
     # Realtime output
     while True:
-        output = process.stdout.read().decode('utf-8')
+        if process.stdout is None:
+            raise Exception("stdout is None")
+
+        readdata = process.stdout.read()
+        if readdata is None:
+            continue
+
+        output = readdata.decode('utf-8')
         if output == '' and process.poll() is not None:
             break
         if output:
