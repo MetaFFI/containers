@@ -138,16 +138,6 @@ u2204_cmd = u2204_env.Command(target='build_container_u2204', source=[], action=
 env.Depends(u2204_cmd, ALIAS_BUILD_INSTALLER)
 env.Alias(ALIAS_BUILD_CONTAINER_U2204, u2204_cmd)
 
-
-# * ---- build Ubuntu 24.04 container script ----
-# u2404_env = env.Clone()
-# u2404_env["dockerfile"] = "metaffi-u2404"
-# u2404_env["username"] = "tscs"
-# u2404_env["tag"] = "0.1.2"
-# u2404_cmd = u2404_env.Command(target='build_container_u2404', source=[], action=build_linux_container)
-# env.Depends(u2404_cmd, ALIAS_BUILD_INSTALLER)
-# env.Alias(ALIAS_BUILD_CONTAINER_U2404, u2404_cmd)
-
 # * ---- build Windows Server 2022 Nano container script ----
 win_s2022_nano_env = env.Clone()
 win_s2022_nano_env["dockerfile"] = "metaffi-win-s2022-nano"
@@ -157,34 +147,8 @@ win_s2022_nano_cmd = win_s2022_nano_env.Command(target='build_container_win_s202
 env.Depends(win_s2022_nano_cmd, ALIAS_BUILD_INSTALLER)
 env.Alias(ALIAS_BUILD_CONTAINER_WIN_S2022_NANO, win_s2022_nano_cmd)
 
-# * ---- build Dev Ubuntu 22.04 container script ----
-dev_u2204_env = env.Clone()
-dev_u2204_env["dockerfile"] = "metaffi-dev-u2204"
-dev_u2204_env["username"] = "tscs"
-dev_u2204_env["tag"] = "0.1.2"
-dev_u2204_cmd = dev_u2204_env.Command(target='build_dev_u2204', source=[], action=build_linux_container)
-env.Depends(dev_u2204_cmd, ALIAS_BUILD_INSTALLER)
-env.Alias(ALIAS_BUILD_DEV_U2204, dev_u2204_cmd)
-
-# * ---- build Dev Ubuntu 24.04 container script ----
-# dev_u2404_env = env.Clone()
-# dev_u2404_env["dockerfile"] = "metaffi-dev-u2404"
-# dev_u2404_env["username"] = "tscs"
-# dev_u2404_env["tag"] = "0.1.2"
-# dev_u2404_cmd = dev_u2404_env.Command(target='build_dev_u2404', source=[], action=build_linux_container)
-# env.Depends(dev_u2404_cmd, ALIAS_BUILD_INSTALLER)
-# env.Alias(ALIAS_BUILD_DEV_U2404, dev_u2404_cmd)
-
-# * ---- build Dev Windows Server 2022 Nano container script ----
-dev_win_s2022_nano_env = env.Clone()
-dev_win_s2022_nano_env["dockerfile"] = "metaffi-dev-win-s2022-nano"
-dev_win_s2022_nano_env["username"] = "tscs"
-dev_win_s2022_nano_env["tag"] = "0.1.2"
-dev_win_s2022_nano_cmd = dev_win_s2022_nano_env.Command(target='build_dev_win_s2022_nano', source=[], action=build_windows_container)
-env.Depends(dev_win_s2022_nano_cmd, ALIAS_BUILD_INSTALLER)
-env.Alias(ALIAS_BUILD_DEV_WIN_S2022_NANO, dev_win_s2022_nano_cmd)
 
 # * ---- build all containers script ----
-all_containers_cmd = env.Alias(ALIAS_BUILD_ALL_CONTAINERS, [u2204_cmd, win_s2022_nano_cmd, dev_u2204_cmd, dev_win_s2022_nano_cmd])
+all_containers_cmd = env.Alias(ALIAS_BUILD_ALL_CONTAINERS, [u2204_cmd, win_s2022_nano_env])
 env.Depends(all_containers_cmd, ALIAS_BUILD_INSTALLER)
 
