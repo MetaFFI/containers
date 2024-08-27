@@ -2,10 +2,11 @@
 FROM ubuntu:22.04
 ARG METAFFI_INSTALLER
 
+# Copy MetaFFI Installer
+COPY ${METAFFI_INSTALLER} .
+
 RUN apt-get update && apt-get upgrade -y && DEBIAN_FRONTEND=noninteractive apt-get install -y apt-utils gcc g++ gdb cmake make build-essential vim wget curl git unzip tar software-properties-common tzdata
 
-# Download MetaFFI Installer
-COPY ${METAFFI_INSTALLER} .
 
 # Install Python to run the installer
 RUN apt-get install -y python3 python3-pip python3.11 python3.11-dev

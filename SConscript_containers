@@ -13,8 +13,16 @@ from colorama import Fore, Style
 import scons_utils
 from site_scons.environment_custom_methods import IsWindows
 import shutil
-from site_scons import ALIAS_BUILD_INSTALLER, ALIAS_BUILD_CONTAINER_U2204, ALIAS_BUILD_CONTAINER_WIN_S2022_NANO
+from site_scons import ALIAS_BUILD_INSTALLER, ALIAS_BUILD_CONTAINER_U2204, ALIAS_BUILD_CONTAINER_WIN_S2022_CORE
 from site_scons import ALIAS_BUILD_ALL_CONTAINERS
+
+# try/catch to avoid error when running scons without building an installer first
+try:
+	from metaffi_installer import METAFFI_VERSION
+except:
+	METAFFI_VERSION = '0.0.0'
+
+CONTAINER_REPO_USER = 'metaffi'
 
 # * ---- Set up the environment ----
 env: SCons.Environment.Environment
@@ -36,28 +44,40 @@ def switch_docker_to_linux_mode(): # only for windows, does nothing on linux
 		if docker_cli is None:
 
 			# check default path
-			if os.path.exists(f'{os.environ["ProgramFiles"]}\\Docker\\Docker\\DockerCli.exe'):
-				docker_cli = f'"{os.environ["ProgramFiles"]}\\Docker\\Docker\\DockerCli.exe"'
+			default_path_docker_cli = f'{os.environ["ProgramFiles"]}\\Docker\\Docker\\DockerCli.exe'
+			if os.path.exists(default_path_docker_cli):
+				docker_cli = default_path_docker_cli
 
 			if docker_cli is None:
-				print("DockerCLI.exe not found. We need it to make sure we're on linux mode", file=sys.stderr)
+				print(f"DockerCLI.exe not found. Neither in PATH nor '{default_path_docker_cli}'. We need it to make sure we're on linux mode", file=sys.stderr)
 				sys.exit(1)
 
-		env.Execute(f'{docker_cli} -SwitchLinuxEngine')
+		retval = env.Execute(f'"{docker_cli}" -SwitchLinuxEngine')
+
+		# fail if retval is not None. If it is an int and zero - it's ok
+		if retval is not None and ((isinstance(retval, int) and retval != 0) or (not isinstance(retval, int))):
+			print(f"Failed switching to linux mode: {retval}. Retval type: {type(retval)}", file=sys.stderr)
+			sys.exit(1)
 
 def switch_docker_to_windows_mode(): # only for windows, does nothing on linux
 	if env.IsWindows():
 		docker_cli = env.WhereIs('DockerCli.exe')
 		if docker_cli is None:
 
-			if os.path.exists(f'{os.environ["ProgramFiles"]}\\Docker\\DockerCli.exe'):
-				docker_cli = f'"{os.environ["ProgramFiles"]}\\Docker\\DockerCli.exe"'
+			# check default path
+			default_path_docker_cli = f'{os.environ["ProgramFiles"]}\\Docker\\Docker\\DockerCli.exe'
+			if os.path.exists(default_path_docker_cli):
+				docker_cli = default_path_docker_cli
 
 			if docker_cli is None:
 				print("DockerCLI.exe not found. We need it to make sure we're on windows mode", file=sys.stderr)
 				sys.exit(1)
 
-		env.Execute(f'{docker_cli} -SwitchWindowsEngine')
+		retval = env.Execute(f'"{docker_cli}" -SwitchWindowsEngine')
+		# fail if retval is not None. If it is an int and zero - it's ok
+		if retval is not None and ((isinstance(retval, int) and retval != 0) or (not isinstance(retval, int))):
+			print(f"Failed switching to windows mode: {retval}. Retval type: {type(retval)}", file=sys.stderr)
+			sys.exit(1)
 	else:
 		print("This is not a windows machine. We can't switch to windows mode", file=sys.stderr)
 		
@@ -70,9 +90,11 @@ def build_container(dockerfile, username, tag, env):
 		sys.exit(1)
 
 	metaffi_installer_path = env.Dir('.').Dir('containers').File('metaffi_installer.py').path
+	# replace backslashes with forward slashes
+	metaffi_installer_path = metaffi_installer_path.replace('\\', '/')
 
 	print(f'Building container from file {dockerfile_fullpath}...')
-	exit_code = env.Execute(f'docker build -f "{dockerfile_fullpath}" --build-arg METAFFI_INSTALLER="{metaffi_installer_path}" --progress=auto --no-cache -t {username}/{dockerfile}:{tag} .')
+	exit_code = env.Execute(f'docker build -f "{dockerfile_fullpath}" --build-arg METAFFI_INSTALLER="{metaffi_installer_path}" --no-cache -t {username}/{dockerfile}:{tag} .')
 	if exit_code:
 		print(f"Failed building container: exit code {exit_code}", file=sys.stderr)
 		sys.exit(1)
@@ -110,45 +132,44 @@ def build_linux_container(target, source, env):
 
 def build_windows_container(target, source, env):
 
-	if check_is_docker_running() == False:
-		print("Docker is not running. Please start Docker before building containers", file=sys.stderr)
-		sys.exit(1)
+	print(f'{Fore.RED}Windows container not supported yet...{Style.RESET_ALL}')
+	# if check_is_docker_running() == False:
+	# 	print("Docker is not running. Please start Docker before building containers", file=sys.stderr)
+	# 	sys.exit(1)
 
-	# if not windows machine - skip
-	if not env.IsWindows():
-		print("This is not a windows machine. We can't build windows containers here", file=sys.stderr)
-		return
+	# # if not windows machine - skip
+	# if not env.IsWindows():
+	# 	print("This is not a windows machine. We can't build windows containers here", file=sys.stderr)
+	# 	return
 
-	switch_docker_to_windows_mode()
+	# switch_docker_to_windows_mode()
 
-	dockerfile = env["dockerfile"]
-	username = env["username"]
-	tag = env["tag"]
+	# dockerfile = env["dockerfile"]
+	# username = env["username"]
+	# tag = env["tag"]
 	
-	build_container(dockerfile, username, tag, env)
-
-# TODO: The tag should the current version (taken from VERSION variable in the root SConstruct???)
+	# build_container(dockerfile, username, tag, env)
 
 # * ---- build Ubuntu 22.04 container script ----
 u2204_env = env.Clone()
 u2204_env["dockerfile"] = "metaffi-u2204"
-u2204_env["username"] = "tscs"
-u2204_env["tag"] = "0.1.2"
+u2204_env["username"] = CONTAINER_REPO_USER
+u2204_env["tag"] = METAFFI_VERSION
 u2204_cmd = u2204_env.Command(target='build_container_u2204', source=[], action=build_linux_container)
 env.Depends(u2204_cmd, ALIAS_BUILD_INSTALLER)
 env.Alias(ALIAS_BUILD_CONTAINER_U2204, u2204_cmd)
 
-# * ---- build Windows Server 2022 Nano container script ----
-win_s2022_nano_env = env.Clone()
-win_s2022_nano_env["dockerfile"] = "metaffi-win-s2022-nano"
-win_s2022_nano_env["username"] = "tscs"
-win_s2022_nano_env["tag"] = "0.1.2"
-win_s2022_nano_cmd = win_s2022_nano_env.Command(target='build_container_win_s2022_nano', source=[], action=build_windows_container)
-env.Depends(win_s2022_nano_cmd, ALIAS_BUILD_INSTALLER)
-env.Alias(ALIAS_BUILD_CONTAINER_WIN_S2022_NANO, win_s2022_nano_cmd)
+# * ---- build Windows Server 2022 Core container script ----
+win_s2022_core_env = env.Clone()
+win_s2022_core_env["dockerfile"] = "metaffi-win-core2022"
+win_s2022_core_env["username"] = CONTAINER_REPO_USER
+win_s2022_core_env["tag"] = METAFFI_VERSION
+win_s2022_core_cmd = win_s2022_core_env.Command(target='build_container_win_s2022_core', source=[], action=build_windows_container)
+env.Depends(win_s2022_core_cmd, ALIAS_BUILD_INSTALLER)
+env.Alias(ALIAS_BUILD_CONTAINER_WIN_S2022_CORE, win_s2022_core_cmd)
 
 
 # * ---- build all containers script ----
-all_containers_cmd = env.Alias(ALIAS_BUILD_ALL_CONTAINERS, [u2204_cmd, win_s2022_nano_env])
+all_containers_cmd = env.Alias(ALIAS_BUILD_ALL_CONTAINERS, [u2204_cmd, win_s2022_core_cmd])
 env.Depends(all_containers_cmd, ALIAS_BUILD_INSTALLER)
 

@@ -2,3 +2,5 @@
 .idea/
 
 metaffi_installer.py
+
+__pycache__/
