@@ -2,5 +2,8 @@
 .idea/
 
 metaffi_installer.py
+metaffi_plugin_go_installer.py
+metaffi_plugin_openjdk_installer.py
+metaffi_plugin_python311_installer.py
 
 __pycache__/

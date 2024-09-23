@@ -93,8 +93,24 @@ def build_container(dockerfile, username, tag, env):
 	# replace backslashes with forward slashes
 	metaffi_installer_path = metaffi_installer_path.replace('\\', '/')
 
+	metaffi_plugin_go_installer_path = env.Dir('.').Dir('containers').File('metaffi_plugin_go_installer.py').path
+	# replace backslashes with forward slashes
+	metaffi_plugin_go_installer_path = metaffi_plugin_go_installer_path.replace('\\', '/')
+
+	metaffi_plugin_openjdk_installer_path = env.Dir('.').Dir('containers').File('metaffi_plugin_openjdk_installer.py').path
+	# replace backslashes with forward slashes
+	metaffi_plugin_openjdk_installer_path = metaffi_plugin_openjdk_installer_path.replace('\\', '/')
+
+	metaffi_plugin_python311_installer_path = env.Dir('.').Dir('containers').File('metaffi_plugin_python311_installer.py').path
+	# replace backslashes with forward slashes
+	metaffi_plugin_python311_installer_path = metaffi_plugin_python311_installer_path.replace('\\', '/')
+
+	pip_requirements_path = env.Dir('.').Dir('containers').File('requirements.txt').path
+	# replace backslashes with forward slashes
+	pip_requirements_path = pip_requirements_path.replace('\\', '/')
+
 	print(f'Building container from file {dockerfile_fullpath}...')
-	exit_code = env.Execute(f'docker build -f "{dockerfile_fullpath}" --build-arg METAFFI_INSTALLER="{metaffi_installer_path}" --no-cache -t {username}/{dockerfile}:{tag} .')
+	exit_code = env.Execute(f'docker build -f "{dockerfile_fullpath}" --build-arg METAFFI_INSTALLER="{metaffi_installer_path}" --build-arg METAFFI_PYTHON311_INSTALLER="{metaffi_plugin_python311_installer_path}" --build-arg METAFFI_OPENJDK_INSTALLER="{metaffi_plugin_openjdk_installer_path}" --build-arg METAFFI_GO_INSTALLER="{metaffi_plugin_go_installer_path}" --build-arg PIP_REQUIREMENTS="{pip_requirements_path}" --no-cache -t {username}/{dockerfile}:{tag} .')
 	if exit_code:
 		print(f"Failed building container: exit code {exit_code}", file=sys.stderr)
 		sys.exit(1)
@@ -156,7 +172,6 @@ u2204_env["dockerfile"] = "metaffi-u2204"
 u2204_env["username"] = CONTAINER_REPO_USER
 u2204_env["tag"] = METAFFI_VERSION
 u2204_cmd = u2204_env.Command(target='build_container_u2204', source=[], action=build_linux_container)
-env.Depends(u2204_cmd, ALIAS_BUILD_INSTALLER)
 env.Alias(ALIAS_BUILD_CONTAINER_U2204, u2204_cmd)
 
 # * ---- build Windows Server 2022 Core container script ----
@@ -165,11 +180,10 @@ win_s2022_core_env["dockerfile"] = "metaffi-win-core2022"
 win_s2022_core_env["username"] = CONTAINER_REPO_USER
 win_s2022_core_env["tag"] = METAFFI_VERSION
 win_s2022_core_cmd = win_s2022_core_env.Command(target='build_container_win_s2022_core', source=[], action=build_windows_container)
-env.Depends(win_s2022_core_cmd, ALIAS_BUILD_INSTALLER)
 env.Alias(ALIAS_BUILD_CONTAINER_WIN_S2022_CORE, win_s2022_core_cmd)
 
 
 # * ---- build all containers script ----
 all_containers_cmd = env.Alias(ALIAS_BUILD_ALL_CONTAINERS, [u2204_cmd, win_s2022_core_cmd])
-env.Depends(all_containers_cmd, ALIAS_BUILD_INSTALLER)
+
 
