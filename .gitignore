@@ -9,3 +9,5 @@ metaffi_plugin_python311_installer.py
 __pycache__/
 go.work
 go.work.sum
+
+metaffi-installer*
