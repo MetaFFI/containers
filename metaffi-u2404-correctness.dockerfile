@@ -57,7 +57,7 @@ RUN chmod +x /tmp/metaffi-installer && /tmp/metaffi-installer -s && rm /tmp/meta
 ENV METAFFI_HOME=/usr/local/metaffi
 ENV PATH=$METAFFI_HOME:$PATH
 # Include METAFFI_HOME, JVM plugin dir, and JVM server dir (for libjvm.so)
-ENV LD_LIBRARY_PATH=/usr/local/metaffi:/usr/local/metaffi/jvm:/usr/lib/jvm/temurin-21/lib/server
+ENV LD_LIBRARY_PATH=/usr/local/metaffi:/usr/local/metaffi/cpp:/usr/local/metaffi/jvm:/usr/lib/jvm/temurin-21/lib/server
 
 RUN metaffi --help
 
@@ -67,11 +67,13 @@ RUN metaffi --help
 COPY containers/metaffi-plugin-python3-0.3.1-ubuntu.zip /tmp/metaffi-plugin-python3.zip
 COPY containers/metaffi-plugin-go-0.3.1-ubuntu.zip      /tmp/metaffi-plugin-go.zip
 COPY containers/metaffi-plugin-jvm-0.3.1-ubuntu.zip     /tmp/metaffi-plugin-jvm.zip
+COPY containers/metaffi-plugin-cpp-0.3.1-ubuntu.zip     /tmp/metaffi-plugin-cpp.zip
 
 RUN for ZIP in \
         /tmp/metaffi-plugin-python3.zip \
         /tmp/metaffi-plugin-go.zip \
-        /tmp/metaffi-plugin-jvm.zip; do \
+        /tmp/metaffi-plugin-jvm.zip \
+        /tmp/metaffi-plugin-cpp.zip; do \
     TMPDIR=$(mktemp -d); \
     unzip -q "$ZIP" -d "$TMPDIR"; \
     PLUGIN=$(python3 -c "import json; print(json.load(open('$TMPDIR/plugin_manifest.json'))['name'])"); \

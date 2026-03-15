@@ -2,6 +2,10 @@ FROM mcr.microsoft.com/windows/servercore:ltsc2025
 
 SHELL ["powershell", "-Command", "$ErrorActionPreference = 'Stop';"]
 
+# Version of MetaFFI artifacts (installer, plugin zips).
+# Override with: docker build --build-arg VERSION=x.y.z
+ARG VERSION=0.3.1
+
 # Create temp directory for downloads
 RUN New-Item -ItemType Directory -Path 'C:\temp' -Force | Out-Null
 
@@ -11,7 +15,7 @@ RUN Invoke-WebRequest -Uri 'https://aka.ms/vs/17/release/vc_redist.x64.exe' -Out
     Remove-Item 'C:\temp\vc_redist.x64.exe'
 
 # ---- Install MetaFFI core ----
-COPY containers/metaffi-installer-0.3.1-windows.exe C:\\temp\\metaffi-installer.exe
+COPY containers/metaffi-installer-${VERSION}-windows.exe C:\\temp\\metaffi-installer.exe
 RUN C:\\temp\\metaffi-installer.exe -s; \
     Remove-Item 'C:\\temp\\metaffi-installer.exe'
 
@@ -87,9 +91,9 @@ RUN $old = [Environment]::GetEnvironmentVariable('PATH','Machine'); \
 RUN mvn --version
 
 # ---- Install plugins via metaffi CLI ----
-COPY containers/metaffi-plugin-python3-0.3.1-windows.zip C:\\temp\\metaffi-plugin-python3.zip
-COPY containers/metaffi-plugin-go-0.3.1-windows.zip C:\\temp\\metaffi-plugin-go.zip
-COPY containers/metaffi-plugin-jvm-0.3.1-windows.zip C:\\temp\\metaffi-plugin-jvm.zip
+COPY containers/metaffi-plugin-python3-${VERSION}-windows.zip C:\\temp\\metaffi-plugin-python3.zip
+COPY containers/metaffi-plugin-go-${VERSION}-windows.zip C:\\temp\\metaffi-plugin-go.zip
+COPY containers/metaffi-plugin-jvm-${VERSION}-windows.zip C:\\temp\\metaffi-plugin-jvm.zip
 
 RUN metaffi --plugin --install C:\\temp\\metaffi-plugin-python3.zip; \
     Remove-Item 'C:\\temp\\metaffi-plugin-python3.zip'
@@ -99,6 +103,14 @@ RUN metaffi --plugin --install C:\\temp\\metaffi-plugin-go.zip; \
 
 RUN metaffi --plugin --install C:\\temp\\metaffi-plugin-jvm.zip; \
     Remove-Item 'C:\\temp\\metaffi-plugin-jvm.zip'
+
+COPY containers/metaffi-plugin-cpp-${VERSION}-windows.zip C:\\temp\\metaffi-plugin-cpp.zip
+
+RUN metaffi --plugin --install C:\\temp\\metaffi-plugin-cpp.zip; \
+    Remove-Item 'C:\\temp\\metaffi-plugin-cpp.zip'
+
+RUN $old = [Environment]::GetEnvironmentVariable('PATH','Machine'); \
+    [Environment]::SetEnvironmentVariable('PATH', $env:METAFFI_HOME + '\cpp;' + $old, 'Machine')
 
 # The JVM runtime looks for metaffi.api.jar at $METAFFI_HOME/jvm/metaffi.api.jar,
 # but the installer places it in $METAFFI_HOME/jvm/api/metaffi.api.jar.
@@ -126,4 +138,3 @@ ENV METAFFI_SOURCE_ROOT="C:\\metaffi-tests"
 # fail_fast=true in config: any test failure → non-zero exit → docker build fails
 WORKDIR C:\\metaffi-tests
 RUN python tests\run_all_tests.py --config tests\configs\only_correctness_config.yml
-
