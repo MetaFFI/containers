@@ -7,13 +7,20 @@ SHELL ["/bin/bash", "-c"]
 # compiled against 3.11, so install 3.11 via the deadsnakes PPA.
 RUN apt-get update && apt-get install -y --no-install-recommends \
         software-properties-common curl unzip zip ca-certificates \
-        build-essential && \
+        build-essential cmake ninja-build \
+        libboost-filesystem-dev libspdlog-dev libfmt-dev && \
     add-apt-repository ppa:deadsnakes/ppa && \
     apt-get update && apt-get install -y --no-install-recommends \
         python3.11 python3.11-dev python3.11-distutils \
         libpython3.11 python3-pip && \
     update-alternatives --install /usr/bin/python3 python3 /usr/bin/python3.11 1 && \
     rm -rf /var/lib/apt/lists/*
+
+# ---- doctest (header-only, not in Ubuntu 24.04 repos) ----
+RUN curl -fsSL https://github.com/doctest/doctest/archive/v2.4.12.tar.gz \
+    | tar xz -C /tmp && \
+    cp -r /tmp/doctest-2.4.12/doctest /usr/local/include/ && \
+    rm -rf /tmp/doctest-2.4.12
 
 RUN python3 -m pip install --no-cache-dir --break-system-packages \
         pycrosskit metaffi-api pytest pyyaml

@@ -2,10 +2,6 @@ FROM mcr.microsoft.com/windows/servercore:ltsc2025
 
 SHELL ["powershell", "-Command", "$ErrorActionPreference = 'Stop';"]
 
-# Version of MetaFFI artifacts (installer, plugin zips).
-# Override with: docker build --build-arg VERSION=x.y.z
-ARG VERSION=0.3.1
-
 # Create temp directory for downloads
 RUN New-Item -ItemType Directory -Path 'C:\temp' -Force | Out-Null
 
@@ -14,27 +10,17 @@ RUN Invoke-WebRequest -Uri 'https://aka.ms/vs/17/release/vc_redist.x64.exe' -Out
     Start-Process -FilePath 'C:\temp\vc_redist.x64.exe' -ArgumentList '/install','/quiet','/norestart' -Wait; \
     Remove-Item 'C:\temp\vc_redist.x64.exe'
 
-# ---- Install MetaFFI core ----
-COPY containers/metaffi-installer-${VERSION}-windows.exe C:\\temp\\metaffi-installer.exe
-RUN C:\\temp\\metaffi-installer.exe -s; \
-    Remove-Item 'C:\\temp\\metaffi-installer.exe'
+# ---- Install MSVC Build Tools (needed to compile C++ host tests) ----
+RUN Invoke-WebRequest -Uri 'https://aka.ms/vs/17/release/vs_buildtools.exe' -OutFile 'C:\temp\vs_buildtools.exe'; \
+    Start-Process -FilePath 'C:\temp\vs_buildtools.exe' -ArgumentList \
+      '--quiet','--wait','--norestart','--nocache', \
+      '--add','Microsoft.VisualStudio.Workload.VCTools', \
+      '--add','Microsoft.VisualStudio.Component.VC.Tools.x86.x64', \
+      '--add','Microsoft.VisualStudio.Component.Windows11SDK.26100' \
+      -Wait; \
+    Remove-Item 'C:\temp\vs_buildtools.exe' -Force
 
-# The installer writes METAFFI_HOME to the registry and adds it to PATH.
-# Docker ENV makes it visible to docker inspect and subsequent layers.
-ENV METAFFI_HOME="C:\\Users\\ContainerAdministrator\\MetaFFI"
-ENV CGO_CFLAGS="-O2 -g -IC:/Users/ContainerAdministrator/MetaFFI -IC:/Users/ContainerAdministrator/MetaFFI/include -IC:/metaffi-tests/sdk"
-
-# Prepend METAFFI_HOME to the container PATH
-RUN $old = [Environment]::GetEnvironmentVariable('PATH','Machine'); \
-    [Environment]::SetEnvironmentVariable('PATH', $env:METAFFI_HOME + ';' + $old, 'Machine')
-
-# Overwrite metaffi.exe with the newly built version (supports zip plugin install)
-COPY containers/metaffi.exe C:\\Users\\ContainerAdministrator\\MetaFFI\\metaffi.exe
-
-# Verify core installation
-RUN metaffi --help
-
-# ---- Install Python 3.12 ----
+# ---- Install Python 3.12 (must come before MetaFFI installer — it needs pip for pycrosskit) ----
 RUN Invoke-WebRequest -Uri 'https://www.python.org/ftp/python/3.12.9/python-3.12.9-amd64.exe' -OutFile 'C:\temp\python-installer.exe'; \
     Start-Process -FilePath 'C:\temp\python-installer.exe' -ArgumentList '/quiet','InstallAllUsers=1','PrependPath=1','Include_test=0' -Wait; \
     Remove-Item 'C:\temp\python-installer.exe'
@@ -43,8 +29,23 @@ RUN Invoke-WebRequest -Uri 'https://www.python.org/ftp/python/3.12.9/python-3.12
 RUN $old = [Environment]::GetEnvironmentVariable('PATH','Machine'); \
     [Environment]::SetEnvironmentVariable('PATH', $old, 'Machine')
 
-# Install pycrosskit (needed by Go/JVM plugin hooks), metaffi-api, and test dependencies
+# Install pycrosskit (needed by the MetaFFI installer itself), metaffi-api, and test dependencies
 RUN python -m pip install --no-cache-dir pycrosskit metaffi-api pytest pyyaml
+
+# ---- Install MetaFFI core (from local build artifact) ----
+ENV METAFFI_HOME="C:\\Users\\ContainerAdministrator\\MetaFFI"
+COPY containers/metaffi-core-0.3.1-Debug-windows.zip C:\\temp\\metaffi-core.zip
+RUN New-Item -ItemType Directory -Path $env:METAFFI_HOME -Force | Out-Null; \
+    Expand-Archive -Path 'C:\temp\metaffi-core.zip' -DestinationPath $env:METAFFI_HOME -Force; \
+    Remove-Item 'C:\temp\metaffi-core.zip'
+ENV CGO_CFLAGS="-O2 -g -IC:/Users/ContainerAdministrator/MetaFFI -IC:/Users/ContainerAdministrator/MetaFFI/include -IC:/metaffi-tests/sdk"
+
+# Prepend METAFFI_HOME to the container PATH
+RUN $old = [Environment]::GetEnvironmentVariable('PATH','Machine'); \
+    [Environment]::SetEnvironmentVariable('PATH', $env:METAFFI_HOME + ';' + $old, 'Machine')
+
+# Verify core installation
+RUN metaffi --help
 
 # ---- Install Go 1.23 ----
 RUN Invoke-WebRequest -Uri 'https://go.dev/dl/go1.23.6.windows-amd64.zip' -OutFile 'C:\temp\go.zip'; \
@@ -90,24 +91,30 @@ RUN $old = [Environment]::GetEnvironmentVariable('PATH','Machine'); \
     [Environment]::SetEnvironmentVariable('PATH', 'C:\maven\bin;' + $old, 'Machine')
 RUN mvn --version
 
-# ---- Install plugins via metaffi CLI ----
-COPY containers/metaffi-plugin-python3-${VERSION}-windows.zip C:\\temp\\metaffi-plugin-python3.zip
-COPY containers/metaffi-plugin-go-${VERSION}-windows.zip C:\\temp\\metaffi-plugin-go.zip
-COPY containers/metaffi-plugin-jvm-${VERSION}-windows.zip C:\\temp\\metaffi-plugin-jvm.zip
+# ---- Install Git (required by vcpkg bootstrap) ----
+RUN Invoke-WebRequest -Uri 'https://github.com/git-for-windows/git/releases/download/v2.47.1.windows.1/Git-2.47.1-64-bit.exe' \
+        -OutFile 'C:\temp\git.exe'; \
+    Start-Process -FilePath 'C:\temp\git.exe' -ArgumentList '/VERYSILENT','/NORESTART' -Wait; \
+    Remove-Item 'C:\temp\git.exe' -Force
+RUN $old = [Environment]::GetEnvironmentVariable('PATH','Machine'); \
+    [Environment]::SetEnvironmentVariable('PATH', 'C:\Program Files\Git\cmd;' + $old, 'Machine')
 
-RUN metaffi --plugin --install C:\\temp\\metaffi-plugin-python3.zip; \
-    Remove-Item 'C:\\temp\\metaffi-plugin-python3.zip'
+# ---- Install vcpkg + C++ dependencies (doctest, spdlog header-only) ----
+RUN git clone https://github.com/microsoft/vcpkg.git C:\vcpkg; \
+    C:\vcpkg\bootstrap-vcpkg.bat -disableMetrics
+ENV VCPKG_ROOT="C:\\vcpkg"
+RUN C:\vcpkg\vcpkg install doctest:x64-windows spdlog:x64-windows
 
-RUN metaffi --plugin --install C:\\temp\\metaffi-plugin-go.zip; \
-    Remove-Item 'C:\\temp\\metaffi-plugin-go.zip'
+# ---- Install plugins from local build artifacts ----
+COPY containers/metaffi-plugin-python3-0.3.1-windows.zip C:\\temp\\plugin-python3.zip
+COPY containers/metaffi-plugin-go-0.3.1-windows.zip      C:\\temp\\plugin-go.zip
+COPY containers/metaffi-plugin-jvm-0.3.1-windows.zip     C:\\temp\\plugin-jvm.zip
+COPY containers/metaffi-plugin-cpp-0.3.1-windows.zip     C:\\temp\\plugin-cpp.zip
 
-RUN metaffi --plugin --install C:\\temp\\metaffi-plugin-jvm.zip; \
-    Remove-Item 'C:\\temp\\metaffi-plugin-jvm.zip'
-
-COPY containers/metaffi-plugin-cpp-${VERSION}-windows.zip C:\\temp\\metaffi-plugin-cpp.zip
-
-RUN metaffi --plugin --install C:\\temp\\metaffi-plugin-cpp.zip; \
-    Remove-Item 'C:\\temp\\metaffi-plugin-cpp.zip'
+RUN metaffi --plugin --install 'C:\temp\plugin-python3.zip'; Remove-Item 'C:\temp\plugin-python3.zip'
+RUN metaffi --plugin --install 'C:\temp\plugin-go.zip';      Remove-Item 'C:\temp\plugin-go.zip'
+RUN metaffi --plugin --install 'C:\temp\plugin-jvm.zip';     Remove-Item 'C:\temp\plugin-jvm.zip'
+RUN metaffi --plugin --install 'C:\temp\plugin-cpp.zip';     Remove-Item 'C:\temp\plugin-cpp.zip'
 
 RUN $old = [Environment]::GetEnvironmentVariable('PATH','Machine'); \
     [Environment]::SetEnvironmentVariable('PATH', $env:METAFFI_HOME + '\cpp;' + $old, 'Machine')
@@ -135,6 +142,6 @@ COPY tests/ C:\\metaffi-tests\\tests\\
 ENV METAFFI_SOURCE_ROOT="C:\\metaffi-tests"
 
 # ---- Run correctness tests ----
-# fail_fast=true in config: any test failure → non-zero exit → docker build fails
+# fail_fast=true in config: any test failure -> non-zero exit -> docker build fails
 WORKDIR C:\\metaffi-tests
 RUN python tests\run_all_tests.py --config tests\configs\only_correctness_config.yml
